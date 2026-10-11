@@ -9,6 +9,7 @@
 @inject DialogService Dialogs
 @inject ToastService Toasts
 @inject NavigationManager Navigation
+@inject BrowserStorage Storage
 
 @* Библиотека сценариев — общая для Хранителей (в v1 «Шаблоны сценариев»; сценарии кампаний в 2.0 стали
    прохождениями, T2.5c). /scenarios/new — та же страница с открытой формой нового сценария: адрес v1 сохранён.
@@ -34,7 +35,7 @@
         RenderFragment favoritesChip =
             @<Button Variant="ButtonVariant.Secondary" Icon="@(_onlyFavorites ? "fa-star" : "fa-regular fa-star")"
                      class="@(_onlyFavorites ? "cm-chip-on" : null)" aria-pressed="@(_onlyFavorites ? "true" : "false")"
-                     data-testid="scenario-favorites-filter" OnClick="() => _onlyFavorites = !_onlyFavorites">Избранное</Button>;
+                     data-testid="scenario-favorites-filter" OnClick="ToggleFavorites">Избранное</Button>;
     }
     @if (HasSearch)
     {
@@ -166,13 +167,24 @@
     private string _search = "";
     private bool _importOpen;
     private bool _onlyFavorites;
+    private Task _restore = Task.CompletedTask;
+    private bool _firstLoad = true;
+
+    /// <summary>Ключ <c>localStorage</c>: фильтр «Избранное» переживает перезагрузку (на устройстве, не на сервере).</summary>
+    private const string FavoritesKey = "cm.scenarios-favorites-only";
 
     /// <summary>Поиск появляется, когда сценариев больше этого числа.</summary>
     private const int SearchFrom = 6;
 
     // Окно «Новый сценарий» открыто адресом, поэтому странице нужна подписка на его смену: переход /scenarios ↔
     // /scenarios/new сам её не перерисовывает (#165 — кнопка меняла адрес, окно не открывалось, «Отмена» не закрывала).
-    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        _restore = RestoreFilterAsync();
+    }
+
+    private async Task RestoreFilterAsync() => _onlyFavorites = await Storage.GetAsync(FavoritesKey) == "1";
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
 
@@ -198,7 +210,15 @@
     private void ResetFilters()
     {
         _search = string.Empty;
-        _onlyFavorites = false;
+        SetOnlyFavorites(false);
+    }
+
+    private void ToggleFavorites() => SetOnlyFavorites(!_onlyFavorites);
+
+    private void SetOnlyFavorites(bool value)
+    {
+        _onlyFavorites = value;
+        _ = value ? Storage.SetAsync(FavoritesKey, "1") : Storage.RemoveAsync(FavoritesKey);
     }
 
     private int SameNameCount(ScenarioSummaryDto scenario) =>
@@ -206,7 +226,15 @@
 
     private async Task<ScenarioListDto> LoadAsync(CancellationToken cancellationToken)
     {
+        // Список появляется после чтения сохранённого фильтра: иначе первый кадр показал бы все карточки и тут же сжался.
+        await _restore;
         _list = await Api.ListAsync(cancellationToken);
+        // Сохранённый фильтр без единой отмеченной звёздочки оставил бы при заходе пустой список без причины: снимаем его.
+        // Только при первой загрузке: снятая на странице последняя звёздочка оставляет «Нет сценариев по этим условиям».
+        if (_firstLoad && _onlyFavorites && !_list.Items.Any(i => i.IsFavorite))
+            SetOnlyFavorites(false);
+
+        _firstLoad = false;
         StateHasChanged(); // кнопка «Новый сценарий» в шапке — вне AsyncContent
         return _list;
     }
