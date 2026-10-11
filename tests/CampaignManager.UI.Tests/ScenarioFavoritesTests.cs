@@ -30,8 +30,15 @@ public sealed class ScenarioFavoritesTests : KitContext
         CanDelete = true,
     };
 
-    private IRenderedComponent<ScenariosPage> Library(params ScenarioSummaryDto[] items)
+    private const string FilterKey = "cm.scenarios-favorites-only";
+
+    private IRenderedComponent<ScenariosPage> Library(params ScenarioSummaryDto[] items) => Library(storedFilter: false, items);
+
+    private IRenderedComponent<ScenariosPage> Library(bool storedFilter, params ScenarioSummaryDto[] items)
     {
+        if (storedFilter)
+            JSInterop.Setup<string?>("localStorage.getItem", FilterKey).SetResult("1");
+
         AddAuthorization().SetAuthorized("Хранитель").SetPolicies(Policies.Keeper);
         Services.AddSingleton(Fake.Of<IScenariosApi>(new()
         {
@@ -47,7 +54,10 @@ public sealed class ScenarioFavoritesTests : KitContext
         }));
         Services.AddSingleton(Fake.Of<IScenarioExchangeApi>(new()));
         var cut = Render<ScenariosPage>();
-        cut.WaitForState(() => cut.FindAll("[data-testid=scenario-card]").Count == items.Length);
+        // Со сохранённым фильтром карточек может быть меньше, чем сценариев: тест ждёт сам.
+        if (!storedFilter)
+            cut.WaitForState(() => cut.FindAll("[data-testid=scenario-card]").Count == items.Length);
+
         return cut;
     }
 
@@ -147,5 +157,46 @@ public sealed class ScenarioFavoritesTests : KitContext
 
         cut.Find("[data-testid=scenario-favorites-filter]").Click();
         Assert.Equal(["Сценарий 7"], Titles(cut));
+    }
+
+    [Fact]
+    public void The_filter_is_written_to_the_device_and_removed_when_switched_off()
+    {
+        var cut = Library(Summary("Аркхем"), Summary("Яма", favorite: true));
+
+        cut.Find("[data-testid=scenario-favorites-filter]").Click();
+        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "localStorage.setItem" && (string?)i.Arguments[0] == FilterKey && (string?)i.Arguments[1] == "1");
+
+        cut.Find("[data-testid=scenario-favorites-filter]").Click();
+        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "localStorage.removeItem" && (string?)i.Arguments[0] == FilterKey);
+    }
+
+    [Fact]
+    public void A_stored_filter_is_restored_on_entry()
+    {
+        var cut = Library(storedFilter: true, Summary("Аркхем"), Summary("Башня"), Summary("Яма", favorite: true));
+
+        cut.WaitForAssertion(() => Assert.Equal(["Яма"], Titles(cut)));
+        Assert.Equal("true", cut.Find("[data-testid=scenario-favorites-filter]").GetAttribute("aria-pressed"));
+    }
+
+    [Fact]
+    public void Nothing_is_filtered_without_a_stored_filter()
+    {
+        var cut = Library(Summary("Аркхем"), Summary("Яма", favorite: true));
+
+        Assert.Equal(["Яма", "Аркхем"], Titles(cut));
+        Assert.Equal("false", cut.Find("[data-testid=scenario-favorites-filter]").GetAttribute("aria-pressed"));
+    }
+
+    [Fact]
+    public void A_stored_filter_is_dropped_when_nothing_is_starred_any_more()
+    {
+        var cut = Library(storedFilter: true, Summary("Аркхем"), Summary("Башня"));
+
+        cut.WaitForAssertion(() => Assert.Equal(["Аркхем", "Башня"], Titles(cut)));
+        Assert.Empty(cut.FindAll("[data-testid=scenario-favorites-filter]"));
+        Assert.DoesNotContain("Нет сценариев по этим условиям", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "localStorage.removeItem" && (string?)i.Arguments[0] == FilterKey);
     }
 }

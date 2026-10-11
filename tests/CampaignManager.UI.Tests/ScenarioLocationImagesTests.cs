@@ -60,14 +60,16 @@ public sealed class ScenarioLocationImagesTests : KitContext
     };
 
     [Fact]
-    public void Play_shows_the_cover_beside_the_title_and_opens_the_gallery_full_screen()
+    public void Play_shows_the_cover_as_a_hero_under_the_title_and_opens_the_gallery_full_screen()
     {
         var cut = Render<ScenarioPlay>(p => p.Add(c => c.Scenario, Scenario()).Add(c => c.LocationId, CafeId));
 
+        var hero = cut.Find("[data-testid=location-hero]");
         var cover = cut.Find("[data-testid=location-cover]");
         Assert.Equal("Иллюстрации: Кофейня", cover.GetAttribute("aria-label"));
-        Assert.Contains($"{FilesRoutes.Content(Cover)}?w=480", cover.InnerHtml, StringComparison.Ordinal); // миниатюра, не оригинал
-        Assert.Equal("2", cover.QuerySelector(".cm-tile-count")!.TextContent);
+        Assert.Contains($"{FilesRoutes.Content(Cover)}?w=1200", hero.InnerHtml, StringComparison.Ordinal); // уменьшенная копия, не оригинал
+        Assert.Equal("Кофейня", hero.QuerySelector("h2")!.TextContent.Trim()); // название лежит на кадре
+        Assert.Equal("2", hero.QuerySelector(".cm-tile-count")!.TextContent.Trim());
         Assert.Empty(cut.FindAll("[data-testid=location-showcase]"));
 
         cover.Click();
@@ -83,6 +85,8 @@ public sealed class ScenarioLocationImagesTests : KitContext
         var cut = Render<ScenarioPlay>(p => p.Add(c => c.Scenario, Scenario()).Add(c => c.LocationId, PierId));
 
         Assert.Empty(cut.FindAll("[data-testid=location-cover]"));
+        Assert.Empty(cut.FindAll("[data-testid=location-hero]"));
+        Assert.Equal("Пирс", cut.Find("[data-testid=play-location-detail] h2").TextContent.Trim());
     }
 
     [Fact]

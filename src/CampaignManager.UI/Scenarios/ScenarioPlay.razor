@@ -371,38 +371,50 @@ else
         </section>
     };
 
+    /// <summary>Путь, название и адрес локации; на кадре обложки — светлым по затемнению (<c>cm-location-hero</c>).</summary>
+    private RenderFragment LocationTitle(ScenarioLocationDto location, bool onImage) => __builder =>
+    {
+        <div class="min-w-0">
+            @if (location.ParentId is not null)
+            {
+                <p class="@(onImage ? "text-sm" : "cm-text-muted text-sm")">@LocationTree.Path(Scenario.Locations, location.ParentId.Value)</p>
+            }
+            <h2 class="cm-title-serif text-2xl @(onImage ? "" : "text-primary-900")">@location.Name</h2>
+            @if (location.Address is { } address)
+            {
+                <p class="@(onImage ? "text-sm" : "cm-text-muted text-sm")"><i class="fa-solid fa-map-pin mr-1" aria-hidden="true"></i>@address</p>
+            }
+        </div>
+    };
+
     private RenderFragment LocationView(ScenarioLocationDto location) => __builder =>
     {
         var pool = MusicPool.Of(location.MusicTags, location.TrackIds);
         var children = Scenario.Locations.Where(l => l.ParentId == location.Id).ToList();
         <section class="flex flex-col gap-4" data-testid="play-location-detail">
-            @* Обложка — сбоку от названия, а не над описанием: проверки и описание не уезжают за низ экрана (~620px под шапкой).
-               Касание раскрывает галерею во весь экран (LocationGalleryShowcase); у нескольких картинок — счётчик в углу. *@
-            <div class="flex items-start gap-3">
-                <div class="min-w-0 flex-1">
-                    @if (location.ParentId is not null)
+            @* Обложка — кадр во всю ширину колонки, название лежит на нём: проверки и описание остаются на первом экране (~620px под
+               шапкой), потому что кадр занимает место названия, а не добавляется над ним. Касание кадра раскрывает галерею во весь
+               экран (LocationGalleryShowcase); у нескольких картинок — счётчик в углу. Локация без картинок — просто название. *@
+            @if (location.Images.Count > 0)
+            {
+                var cover = location.Images[0];
+                <div class="cm-location-hero" data-testid="location-hero">
+                    <img src="@ImageUrls.Thumb(cover.Url, 1200)" alt="" />
+                    <button type="button" class="cm-location-cover" data-testid="location-cover"
+                            aria-label="@($"Иллюстрации: {location.Name}")" @onclick="() => _galleryId = location.Id"></button>
+                    @if (location.Images.Count > 1)
                     {
-                        <p class="cm-text-muted text-sm">@LocationTree.Path(Scenario.Locations, location.ParentId.Value)</p>
+                        <span class="cm-tile-count" aria-hidden="true"><i class="fa-regular fa-images mr-1"></i>@location.Images.Count</span>
                     }
-                    <h2 class="cm-title-serif text-2xl text-primary-900">@location.Name</h2>
-                    @if (location.Address is { } address)
-                    {
-                        <p class="cm-text-muted text-sm"><i class="fa-solid fa-map-pin mr-1" aria-hidden="true"></i>@address</p>
-                    }
+                    <div class="cm-location-hero-title">
+                        @LocationTitle(location, onImage: true)
+                    </div>
                 </div>
-                @if (location.Images.Count > 0)
-                {
-                    var cover = location.Images[0];
-                    <button type="button" class="cm-location-cover cm-art cm-art-landscape" data-testid="location-cover"
-                            aria-label="@($"Иллюстрации: {location.Name}")" @onclick="() => _galleryId = location.Id">
-                        <img src="@ImageUrls.Thumb(cover.Url, 480)" alt="" />
-                        @if (location.Images.Count > 1)
-                        {
-                            <span class="cm-tile-count" aria-hidden="true">@location.Images.Count</span>
-                        }
-                    </button>
-                }
-            </div>
+            }
+            else
+            {
+                @LocationTitle(location, onImage: false)
+            }
 
             @* Музыка — выше описания: атмосферу включают до того, как начинают зачитывать сцену (v1). «Музыка» (настройка) —
                значок и слово рядом с «Играть музыку», а не тяжёлой кнопкой справа от заголовка: заголовок получает всю ширину. *@
