@@ -14,7 +14,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CampaignManager.Data.Migrations
 {
     [DbContext(typeof(CmDbContext))]
-    [Migration("20261011182051_ScenarioLocationImages")]
+    [Migration("20261011184248_ScenarioLocationImages")]
     partial class ScenarioLocationImages
     {
         /// <inheritdoc />
@@ -2229,6 +2229,30 @@ namespace CampaignManager.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioFavorite", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("ScenarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scenario_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("UserId", "ScenarioId")
+                        .HasName("pk_scenario_favorites");
+
+                    b.HasIndex("ScenarioId")
+                        .HasDatabaseName("scenario_favorites_scenario");
+
+                    b.ToTable("scenario_favorites", "cm");
+                });
+
             modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioHandout", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3027,6 +3051,23 @@ namespace CampaignManager.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_scenario_creatures_scenarios_scenario_id");
+                });
+
+            modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioFavorite", b =>
+                {
+                    b.HasOne("CampaignManager.Data.Scenarios.Scenario", null)
+                        .WithMany()
+                        .HasForeignKey("ScenarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scenario_favorites_scenarios_scenario_id");
+
+                    b.HasOne("CampaignManager.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scenario_favorites_users_user_id");
                 });
 
             modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioHandout", b =>
