@@ -28,6 +28,13 @@ public static class ScenariosRoutes
     /// другим Хранителям она не видна (<see cref="ScenarioSummaryDto.IsFavorite"/>, <see cref="ScenarioDto.IsFavorite"/>).</summary>
     public const string FavoritePattern = ScenarioPattern + "/favorite";
 
+    /// <summary>
+    /// Обложка сценария — своя картинка (не первая локация): <c>PUT</c> <see cref="ScenarioCoverInput"/> — поставить или сменить
+    /// (файл уже загружен, <c>POST /api/v1/files?format=webp</c>) → <see cref="ScenarioSavedDto"/>; <c>DELETE</c> — убрать (204, файл
+    /// остаётся в <c>files</c>). Без <c>If-Match</c>, но версию корня запись меняет (обложка — колонка той же строки).
+    /// </summary>
+    public const string CoverPattern = ScenarioPattern + "/cover";
+
     /// <summary><c>PUT</c> <see cref="ReorderRequest"/> — порядок строк одной части.</summary>
     public const string OrderPattern = ScenarioPattern + "/order";
 
@@ -102,6 +109,8 @@ public static class ScenariosRoutes
     public static string Text(Guid scenarioId) => $"{Scenario(scenarioId)}/text";
 
     public static string Favorite(Guid scenarioId) => $"{Scenario(scenarioId)}/favorite";
+
+    public static string Cover(Guid scenarioId) => $"{Scenario(scenarioId)}/cover";
 
     public static string Order(Guid scenarioId) => $"{Scenario(scenarioId)}/order";
 
@@ -210,10 +219,19 @@ public sealed class ScenarioSummaryDto
 
     /// <summary>Сценарий в избранном у вошедшего (личная звёздочка); в списке такие стоят первыми.</summary>
     public bool IsFavorite { get; set; }
+
+    /// <summary>Обложка сценария (<c>scenarios.cover_file_id</c>); null — обложки нет.</summary>
+    public Guid? CoverFileId { get; set; }
+
+    /// <summary>Адрес обложки (<c>/api/v1/files/{id}</c>); миниатюра — <c>?w=</c>.</summary>
+    public string? CoverUrl { get; set; }
 }
 
 /// <summary>Шапка сценария — одна форма на создание и правку.</summary>
 public sealed record ScenarioInput(string Name, string? Summary = null, string? Setting = null, Era? Era = null, string? SettingDate = null);
+
+/// <summary>Обложка сценария: уже загруженный файл (<c>POST /api/v1/files?format=webp</c>). Файла нет — 400.</summary>
+public sealed record ScenarioCoverInput(Guid FileId);
 
 /// <summary>Основной текст Хранителя в Markdown.</summary>
 public sealed record ScenarioTextInput(string? BodyMd);
@@ -263,6 +281,12 @@ public sealed class ScenarioDto
 
     /// <summary>Сценарий в избранном у вошедшего (личная звёздочка).</summary>
     public bool IsFavorite { get; set; }
+
+    /// <summary>Обложка сценария (<c>scenarios.cover_file_id</c>); null — обложки нет.</summary>
+    public Guid? CoverFileId { get; set; }
+
+    /// <summary>Адрес обложки (<c>/api/v1/files/{id}</c>).</summary>
+    public string? CoverUrl { get; set; }
 
     /// <summary>Все локации плоским списком по порядку; дерево — по <see cref="ScenarioLocationDto.ParentId"/>.</summary>
     public List<ScenarioLocationDto> Locations { get; set; } = [];
@@ -553,6 +577,15 @@ public interface IScenariosApi
     /// Сценарий не виден (игроку — всегда) — 404.
     /// </summary>
     Task SetFavoriteAsync(Guid scenarioId, bool favorite, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Поставить или сменить обложку сценария (право — правка сценария). Файла нет — 400. Ответ — новая версия корня: обложка —
+    /// колонка той же строки, что шапка и текст.
+    /// </summary>
+    Task<ScenarioSavedDto> SetCoverAsync(Guid scenarioId, Guid fileId, CancellationToken cancellationToken = default);
+
+    /// <summary>Убрать обложку (файл остаётся в <c>files</c>); обложки и так нет — ничего не меняется.</summary>
+    Task RemoveCoverAsync(Guid scenarioId, CancellationToken cancellationToken = default);
 
     /// <summary>Прохождения сценария в кампаниях, которые ведёт вошедший (администратору — все); незавершённые — первыми.</summary>
     Task<IReadOnlyList<ScenarioRunDto>> ListRunsAsync(Guid scenarioId, CancellationToken cancellationToken = default);

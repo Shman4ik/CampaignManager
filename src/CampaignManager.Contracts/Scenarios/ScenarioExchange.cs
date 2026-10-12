@@ -58,6 +58,12 @@ public sealed class ScenarioFile
     /// <summary>Основной текст Хранителя, Markdown (v1 <c>Journal</c>).</summary>
     public string? Journal { get; set; }
 
+    /// <summary>
+    /// Обложка сценария (2.0): адрес файла этой базы (<c>/api/v1/files/{id}</c>), как у раздатки и иллюстраций локаций; из другой
+    /// базы — пропускается с предупреждением. Замена берёт обложку из файла: нет поля — обложка снимается.
+    /// </summary>
+    public string? CoverUrl { get; set; }
+
     public List<ScenarioFileFact> KeyFacts { get; set; } = [];
 
     /// <summary>Локации по порядку; вложенная — после родителя (так их пишет экспорт: дерево в глубину).</summary>

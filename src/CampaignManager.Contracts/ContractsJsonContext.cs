@@ -127,6 +127,7 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(LocationMusicInput))]
 [JsonSerializable(typeof(LocationImagesInput))]
 [JsonSerializable(typeof(LocationImageInput))]
+[JsonSerializable(typeof(ScenarioCoverInput))]
 [JsonSerializable(typeof(HandoutScreenDto))]
 [JsonSerializable(typeof(IReadOnlyList<ScenarioRunDto>))]
 [JsonSerializable(typeof(SetEncounterRunRequest))]

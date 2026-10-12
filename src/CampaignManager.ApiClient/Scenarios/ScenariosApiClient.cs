@@ -53,6 +53,13 @@ public sealed class ScenariosApiClient(HttpClient http) : IScenariosApi
         await ApiResponses.EnsureSuccessAsync(response, cancellationToken, withCode: true);
     }
 
+    public Task<ScenarioSavedDto> SetCoverAsync(Guid scenarioId, Guid fileId, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Put, ScenariosRoutes.Cover(scenarioId), new ScenarioCoverInput(fileId), Json.ScenarioCoverInput, Json.ScenarioSavedDto,
+            cancellationToken);
+
+    public Task RemoveCoverAsync(Guid scenarioId, CancellationToken cancellationToken = default) =>
+        DeleteUrlAsync(ScenariosRoutes.Cover(scenarioId), cancellationToken);
+
     public async Task<IReadOnlyList<ScenarioRunDto>> ListRunsAsync(Guid scenarioId, CancellationToken cancellationToken = default)
     {
         using var response = await http.GetAsync(ScenariosRoutes.Runs(scenarioId), cancellationToken);
