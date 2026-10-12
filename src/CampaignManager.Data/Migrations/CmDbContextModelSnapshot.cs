@@ -2044,6 +2044,10 @@ namespace CampaignManager.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("body_md");
 
+                    b.Property<Guid?>("CoverFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cover_file_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
@@ -2090,6 +2094,9 @@ namespace CampaignManager.Data.Migrations
 
                     b.HasIndex("AuthorId")
                         .HasDatabaseName("ix_scenarios_author_id");
+
+                    b.HasIndex("CoverFileId")
+                        .HasDatabaseName("ix_scenarios_cover_file_id");
 
                     b.HasIndex("SourceScenarioId")
                         .HasDatabaseName("ix_scenarios_source_scenario_id");
@@ -3010,6 +3017,12 @@ namespace CampaignManager.Data.Migrations
                         .HasForeignKey("AuthorId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_scenarios_users_author_id");
+
+                    b.HasOne("CampaignManager.Data.Files.StoredFile", null)
+                        .WithMany()
+                        .HasForeignKey("CoverFileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_scenarios_files_cover_file_id");
 
                     b.HasOne("CampaignManager.Data.Scenarios.Scenario", null)
                         .WithMany()

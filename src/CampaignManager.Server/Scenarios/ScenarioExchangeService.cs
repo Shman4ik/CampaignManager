@@ -79,6 +79,7 @@ public sealed class ScenarioExchangeService(
             Era = scenario.SettingDate,
             Epoch = scenario.Era,
             Journal = scenario.BodyMd,
+            CoverUrl = ScenarioService.CoverUrl(scenario.CoverFileId),
             KeyFacts = [.. facts.Select(f => new ScenarioFileFact { Title = f.Title, Type = f.Type, Content = f.Content })],
             Locations =
             [
@@ -314,6 +315,7 @@ public sealed class ScenarioExchangeService(
     private async Task<ScenarioImportReport> WritePartsAsync(ScenarioFile file, Scenario scenario, SignedInUser user, ImportLookup lookup,
         ScenarioImportReport report, IDbContextTransaction transaction, IReadOnlySet<Guid> ownSheets, CancellationToken cancellationToken)
     {
+        ImportCover(file, scenario, lookup, report);
         ImportLocations(file, scenario, lookup, report);
         ImportFacts(file, scenario, report);
         ImportHandouts(file, scenario, lookup, report);
@@ -412,6 +414,19 @@ public sealed class ScenarioExchangeService(
             // Правила строк ловят всё, что знают; сюда доходит только то, что держит сама база. Транзакция откатится.
             logger.LogWarning(ex, "Импорт сценария: база отказала в записи");
             throw ApiProblemException.Invalid($"База отказала в записи — ничего не записано: {ex.InnerException?.Message ?? ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Обложка — по тем же правилам, что иллюстрации локаций: файл есть в этой базе — ставится, нет — пропуск с предупреждением.
+    /// Замена берёт обложку из файла, как шапку: нет поля — обложки нет.
+    /// </summary>
+    private static void ImportCover(ScenarioFile file, Scenario scenario, ImportLookup lookup, ScenarioImportReport report)
+    {
+        scenario.CoverFileId = lookup.FileOf(file.CoverUrl);
+        if (scenario.CoverFileId is null && !string.IsNullOrWhiteSpace(file.CoverUrl))
+        {
+            report.Warnings.Add("Обложки сценария нет в этой базе — пропущена; загрузите её заново.");
         }
     }
 
@@ -1018,7 +1033,7 @@ public sealed class ScenarioExchangeService(
                 .ToListAsync(cancellationToken));
 
             List<ScenarioFileCharacter> characters = [.. file.Npcs, .. file.Pregens];
-            var fileIds = file.Handouts.Select(h => h.FileUrl).Concat(characters.Select(c => c.PortraitUrl))
+            var fileIds = file.Handouts.Select(h => h.FileUrl).Concat(characters.Select(c => c.PortraitUrl)).Append(file.CoverUrl)
                 .Concat(file.Locations.SelectMany(l => l.Images ?? []).Select(i => i.Url))
                 .Select(FileIdOf).OfType<Guid>().Distinct().ToList();
 

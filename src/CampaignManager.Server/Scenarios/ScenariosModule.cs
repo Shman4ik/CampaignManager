@@ -60,6 +60,14 @@ public static class ScenariosModule
             await s.SetFavoriteAsync(scenarioId, false, ct);
             return TypedResults.NoContent();
         }).WithName("RemoveScenarioFavorite");
+        // Обложка — и токену агента (scenarios:write): скрипт грузит файл (files:write) и ставит его, как иллюстрации локаций.
+        scenarios.MapPut(ScenariosRoutes.CoverPattern, (Guid scenarioId, ScenarioCoverInput input, ScenarioService s, CancellationToken ct) =>
+            s.SetCoverAsync(scenarioId, input.FileId, ct)).WithName("SetScenarioCover");
+        scenarios.MapDelete(ScenariosRoutes.CoverPattern, async (Guid scenarioId, ScenarioService s, CancellationToken ct) =>
+        {
+            await s.RemoveCoverAsync(scenarioId, ct);
+            return TypedResults.NoContent();
+        }).WithName("RemoveScenarioCover");
         scenarios.MapPut(ScenariosRoutes.TextPattern, (Guid scenarioId, ScenarioTextInput input, HttpRequest request, ScenarioService s, CancellationToken ct) =>
             s.SaveTextAsync(scenarioId, input, HttpIfMatch.Version(request), ct)).WithName("SaveScenarioText");
         scenarios.MapPut(ScenariosRoutes.OrderPattern, async (Guid scenarioId, ReorderRequest input, ScenarioService s, CancellationToken ct) =>

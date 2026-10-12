@@ -29,6 +29,7 @@ public sealed class FileReferencesTests
             ("cm.occupation_images", "file_id"),
             ("cm.scenario_handouts", "file_id"),
             ("cm.scenario_location_images", "file_id"),
+            ("cm.scenarios", "cover_file_id"),
             ("cm.skills", "image_file_id"),
             ("cm.spell_images", "file_id"),
             ("cm.weapon_images", "file_id"),

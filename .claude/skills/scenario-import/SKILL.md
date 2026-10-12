@@ -17,7 +17,7 @@ description: "Переносит сценарий «Зова Ктулху» из
 
 | В файле | Таблица | Как ищется |
 |---|---|---|
-| `name`, `description`, `location`, `era`, `epoch`, `journal` | `scenarios` (`name`, `summary`, `setting`, `setting_date`, `era`, `body_md`) | — |
+| `name`, `description`, `location`, `era`, `epoch`, `journal`, `coverUrl` | `scenarios` (`name`, `summary`, `setting`, `setting_date`, `era`, `body_md`, `cover_file_id`) | обложка — адрес файла этой базы |
 | `locations[]` (+ `parent`, `musicTags`, `tracks`, `images`) | `scenario_locations`, `location_tracks`, `scenario_location_images` | родитель — по имени в файле, трек — по названию фонотеки, картинка — адрес файла этой базы |
 | `locations[].skillChecks[]` | `scenario_checks` | навык — по имени справочника; «ИНТ»/«Интеллект» — характеристика; «Удача» |
 | `keyFacts[]` | `scenario_key_facts` | — |
@@ -48,6 +48,7 @@ description: "Переносит сценарий «Зова Ктулху» из
 {
   "name": "Название", "location": "Бостон, Массачусетс", "era": "Июнь 1925 года", "epoch": "Classic",
   "description": "Кратко для списка", "journal": "## Markdown Хранителя …",
+  "coverUrl": "/api/v1/files/{id}",
   "keyFacts": [{ "title": "…", "type": "Backstory", "content": "…" }],
   "locations": [{
     "name": "День 1. Инструктаж", "address": "…", "description": "Markdown",
@@ -87,6 +88,11 @@ description: "Переносит сценарий «Зова Ктулху» из
   базы — ставится, файла нет (другая база) — пропускается с предупреждением строки; не больше 20, подпись — до 300 знаков.
   Новые картинки в файл не вписывают (их ещё нет в базе): после импорта их заливают API — `POST /api/v1/files?format=webp`,
   затем `POST /api/v1/scenarios/{id}/locations/{locationId}/images` (`Scenarios/CLAUDE.md`, «Иллюстрации локаций»).
+- `coverUrl` — **обложка сценария** (библиотека, вкладка «Описание»), своя картинка, а не первая локация. Правила те же, что у
+  `images`: файл этой базы — ставится, нет — пропуск с общим предупреждением отчёта. Замена (`PUT …/{id}/import`) берёт обложку
+  из файла, как шапку: нет поля — обложка снимается (экспорт её пишет, так что кругооборот её сохраняет). Новую обложку после
+  импорта ставят API — `POST /api/v1/files?format=webp`, затем `PUT /api/v1/scenarios/{id}/cover` с `{ "fileId": "…" }`
+  (токен агента: `scenarios:write` + `files:write`; `Scenarios/CLAUDE.md`, «Обложка сценария»).
 - `parent` — **по имени**: опечатка не роняет импорт, локация уходит на верхний уровень с предупреждением.
 - Поля анонса v1 (`isTemplate`, `isPublished`, `scheduledDate`, `announcementText`) читаются и отбрасываются: анонс и
   запись игроков — у прохождения.

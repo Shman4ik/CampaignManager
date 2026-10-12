@@ -1,12 +1,15 @@
 @using CampaignManager.Contracts.Scenarios
 @using CampaignManager.Core
+@using CampaignManager.Contracts.Files
+@using CampaignManager.UI.Catalogs
 @using CampaignManager.UI.Platform
 @inject IScenariosApi Api
 
 @* Шапка сценария — одна форма на «Новый сценарий» и правку (в v1 «Основное» правилось формой, копировавшей
    девять полей дважды, а описание и журнал рисовались ещё и на странице просмотра). Правка — с версией корня:
    изменили на другом устройстве — текст в окне и «Перечитать», а не молчаливая перезапись. Анонса здесь нет:
-   он у прохождения (T2.5c). *@
+   он у прохождения (T2.5c). Обложка — своё поле (ImagePicker: загрузка в WebP сразу, ссылку пишет «Сохранить» отдельным
+   адресом …/cover после шапки: шапка — с If-Match, обложка — без него). *@
 <Modal Open="Open" Title="@(Scenario is null ? "Новый сценарий" : "Изменить сценарий")" Size="ModalSize.Large" OnClose="CloseAsync" FooterHint="@(Scenario is not null && !IsChanged ? NoChanges : null)" data-testid="scenario-form">
     <ChildContent>
         <form id="scenario-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
@@ -36,10 +39,17 @@
                     </select>
                 </Field>
             }
-            @* «Кратко» — главное описание сценария (сотни знаков), поэтому поле высокое. *@
-            <Field Label="Кратко" Note="Показывается в списке сценариев.">
-                <textarea class="cm-input" rows="6" maxlength="@ScenarioLimits.TextLength" @bind="_summary"></textarea>
-            </Field>
+            @* «Кратко» — главное описание сценария (сотни знаков), поэтому поле высокое. Обложка — справа от него (с sm), а не строкой
+               ниже: окно не растёт и «Сохранить» не уходит под сгиб на 1194×696. *@
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <Field Label="Кратко" Note="Показывается в списке сценариев.">
+                    <textarea class="cm-input" rows="6" maxlength="@ScenarioLimits.TextLength" @bind="_summary"></textarea>
+                </Field>
+                <Field Label="Обложка" Group="true" class="sm:w-40" data-testid="scenario-cover-field">
+                    <ImagePicker Webp="true" FileId="_coverFileId" Url="@ImageUrls.Thumb(_coverUrl, 480)" PreviewClass="h-24 w-36"
+                                 OnChanged="CoverChanged" />
+                </Field>
+            </div>
             @if (_error is not null)
             {
                 <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="scenario-form-error">
@@ -68,6 +78,8 @@
     private string? _setting;
     private string? _settingDate;
     private Era? _era;
+    private Guid? _coverFileId;
+    private string? _coverUrl;
     private string? _nameError;
     private string? _error;
     private bool _stale;
@@ -106,6 +118,8 @@
             _setting = Scenario?.Setting;
             _settingDate = Scenario?.SettingDate;
             _era = Scenario is null ? Era.Classic : Scenario.Era;
+            _coverFileId = Scenario?.CoverFileId;
+            _coverUrl = Scenario?.CoverUrl;
             _nameError = null;
             _error = null;
             _stale = false;
@@ -117,7 +131,11 @@
     private uint _staleVersion;
 
     /// <summary>Правка что-то изменила: «Сохранить» без изменений не нужна.</summary>
-    private bool IsChanged =>
+    private bool IsChanged => IsHeaderChanged || IsCoverChanged;
+
+    private bool IsCoverChanged => _coverFileId != Scenario?.CoverFileId;
+
+    private bool IsHeaderChanged =>
         Scenario is null
         || _name.Trim() != Scenario.Name
         || (_summary ?? "") != (Scenario.Summary ?? "")
@@ -146,11 +164,24 @@
             if (Scenario is null)
             {
                 var created = await Api.CreateAsync(input);
+                // Файл только что загружен, отказ здесь почти невозможен; сценарий уже создан, поэтому окно уходит на рабочее
+                // место в любом случае (второе «Создать» завело бы двойника), обложку тогда ставят там же «Изменить».
+                if (_coverFileId is { } cover)
+                    await SaveCoverAsync(created.Id, cover);
                 await OnCreated.InvokeAsync(created.Id);
             }
             else
             {
-                await Api.UpdateAsync(Scenario.Id, input, Scenario.Version);
+                // Сначала шапка — с версией (конфликт с другим устройством ловится здесь), потом обложка: она без If-Match,
+                // но меняет версию корня, и шапка после неё ушла бы с устаревшей.
+                if (IsHeaderChanged)
+                    await Api.UpdateAsync(Scenario.Id, input, Scenario.Version);
+                if (IsCoverChanged && !await SaveCoverAsync(Scenario.Id, _coverFileId))
+                {
+                    await OnReload.InvokeAsync(); // шапка записана — свежая версия, а в форме остаётся только обложка
+                    return;
+                }
+
                 await OnSaved.InvokeAsync();
             }
         }
@@ -166,6 +197,30 @@
         finally
         {
             _saving = false;
+        }
+    }
+
+    private void CoverChanged(StoredFileDto? file)
+    {
+        _coverFileId = file?.Id;
+        _coverUrl = file?.Url;
+    }
+
+    /// <summary>Поставить или убрать обложку; отказ — текстом в окне (шапка к этому моменту уже записана).</summary>
+    private async Task<bool> SaveCoverAsync(Guid scenarioId, Guid? fileId)
+    {
+        try
+        {
+            if (fileId is { } id)
+                await Api.SetCoverAsync(scenarioId, id);
+            else
+                await Api.RemoveCoverAsync(scenarioId);
+            return true;
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = $"Сохранено, кроме обложки: {ApiErrors.Describe(ex)}";
+            return false;
         }
     }
 

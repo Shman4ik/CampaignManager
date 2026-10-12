@@ -44,6 +44,7 @@ public sealed class ScenarioService(
                 s.SettingDate,
                 s.AuthorId,
                 s.UpdatedAt,
+                s.CoverFileId,
                 Author = dbContext.Users.Where(u => u.Id == s.AuthorId).Select(u => u.DisplayName).FirstOrDefault(),
                 SourceName = dbContext.Scenarios.Where(x => x.Id == s.SourceScenarioId).Select(x => x.Name).FirstOrDefault(),
                 Locations = s.Locations.Count,
@@ -80,6 +81,8 @@ public sealed class ScenarioService(
                     CanEdit = rights.CanEdit,
                     CanDelete = rights.CanDelete,
                     IsFavorite = r.IsFavorite,
+                    CoverFileId = r.CoverFileId,
+                    CoverUrl = CoverUrl(r.CoverFileId),
                 };
             })
             .OrderByDescending(s => s.IsFavorite)
@@ -176,6 +179,8 @@ public sealed class ScenarioService(
             CanEdit = rights.CanEdit,
             CanDelete = rights.CanDelete,
             IsFavorite = scenario.IsFavorite,
+            CoverFileId = s.CoverFileId,
+            CoverUrl = CoverUrl(s.CoverFileId),
             Locations = [.. OrderTree(locations).Select(l => ScenarioParts.Location(l, tracks, skills))],
             KeyFacts = [.. facts.Select(ScenarioParts.Fact)],
             Handouts = [.. handouts.Select(ScenarioParts.Handout)],
@@ -225,6 +230,45 @@ public sealed class ScenarioService(
             // Вторая вкладка поставила звёздочку между проверкой и записью: результат тот же.
         }
     }
+
+    /// <summary>
+    /// Обложка сценария — своя картинка (библиотека, шапка рабочего места), а не первая локация. Право — правка сценария (игроку и
+    /// несуществующему — 404). Файла нет в <c>files</c> — 400. <c>If-Match</c> не нужен (скрипт агента ставит обложку без чтения
+    /// версии), но обложка — колонка корня, поэтому версия и «Изменён» после записи новые: ответ отдаёт их для следующего
+    /// <c>If-Match</c> шапки и текста. Тот же файл второй раз — без записи.
+    /// </summary>
+    public async Task<ScenarioSavedDto> SetCoverAsync(Guid scenarioId, Guid fileId, CancellationToken cancellationToken)
+    {
+        await access.ForScenarioAsync(scenarioId, cancellationToken).Demand(Operation.Edit);
+        if (!await dbContext.Files.AnyAsync(f => f.Id == fileId, cancellationToken))
+        {
+            throw ApiProblemException.Invalid("Картинка не найдена — загрузите её заново.");
+        }
+
+        var scenario = await dbContext.Scenarios.SingleAsync(s => s.Id == scenarioId, cancellationToken);
+        if (scenario.CoverFileId != fileId)
+        {
+            scenario.CoverFileId = fileId;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Обложка сценария {ScenarioId}: файл {FileId}", scenarioId, fileId);
+        }
+
+        return new ScenarioSavedDto(scenario.Version, scenario.UpdatedAt);
+    }
+
+    /// <summary>Убрать обложку; файл остаётся в <c>files</c> (сирот чистит админка). Обложки и так нет — ничего не пишется.</summary>
+    public async Task RemoveCoverAsync(Guid scenarioId, CancellationToken cancellationToken)
+    {
+        await access.ForScenarioAsync(scenarioId, cancellationToken).Demand(Operation.Edit);
+        var scenario = await dbContext.Scenarios.SingleAsync(s => s.Id == scenarioId, cancellationToken);
+        if (scenario.CoverFileId is not null)
+        {
+            scenario.CoverFileId = null;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    internal static string? CoverUrl(Guid? fileId) => fileId is { } file ? FilesRoutes.Content(file) : null;
 
     /// <summary>Шапка: название, описание, место, эпоха, время действия — с версией корня.</summary>
     public async Task<ScenarioSavedDto> UpdateAsync(Guid scenarioId, ScenarioInput input, uint? ifMatch, CancellationToken cancellationToken)
