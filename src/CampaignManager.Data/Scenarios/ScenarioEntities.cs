@@ -38,6 +38,10 @@ public sealed class Scenario : ICreatedAt, IUpdatedAt
 
     public Guid? AuthorId { get; set; }
     public Guid? SourceScenarioId { get; set; }
+
+    /// <summary>Обложка сценария (библиотека, шапка рабочего места) — своя картинка, а не первая локация.</summary>
+    public Guid? CoverFileId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -199,6 +203,8 @@ internal sealed class ScenarioConfiguration : IEntityTypeConfiguration<Scenario>
         entity.Property(s => s.Version).IsRowVersion();
         entity.HasOne<User>().WithMany().HasForeignKey(s => s.AuthorId).OnDelete(DeleteBehavior.SetNull);
         entity.HasOne<Scenario>().WithMany().HasForeignKey(s => s.SourceScenarioId).OnDelete(DeleteBehavior.SetNull);
+        // Как у иллюстраций локаций: живую обложку не удалить из files; снятую — подберёт поиск сирот (FileReferences).
+        entity.HasOne<StoredFile>().WithMany().HasForeignKey(s => s.CoverFileId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
