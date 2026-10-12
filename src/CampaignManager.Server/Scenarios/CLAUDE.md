@@ -9,7 +9,8 @@
 `ApiClient/Scenarios`, страницы — [UI/Scenarios/CLAUDE.md](../../CampaignManager.UI/Scenarios/CLAUDE.md). Таблицы —
 `scenarios`, `scenario_locations`, `scenario_checks`, `scenario_key_facts`, `scenario_handouts`, `scenario_creatures`,
 `scenario_items`, `scenario_npcs`, `scenario_runs`, `run_reservations` (+ `location_tracks`, `characters`, а бронь и ваншот
-пишут `campaigns`/`campaign_members`) из T1.2; миграции модуля — `ScenarioFavorites` (`scenario_favorites`) и `ScenarioLocationImages` (`scenario_location_images`), обе ниже. Знание перенесено из `Features/Scenarios/CLAUDE.md` v1; обходы (кэши и их сбросы,
+пишут `campaigns`/`campaign_members`) из T1.2; миграции модуля — `ScenarioFavorites` (`scenario_favorites`), `ScenarioLocationImages` (`scenario_location_images`) и `ScenarioCover`
+(`scenarios.cover_file_id`), все ниже. Знание перенесено из `Features/Scenarios/CLAUDE.md` v1; обходы (кэши и их сбросы,
 `IDbContextFactory`, снимок пререндера, глубокое копирование локаций в модалке, `@ref` + `Show()`) — нет.
 
 ## API
@@ -22,6 +23,8 @@
 | `PUT /api/v1/scenarios/{id}` | шапка (название, кратко, место, эпоха, время действия), `If-Match` | `ForScenarioAsync` Edit |
 | `PUT /api/v1/scenarios/{id}/text` | основной текст Хранителя (Markdown), `If-Match` | `ForScenarioAsync` Edit |
 | `DELETE /api/v1/scenarios/{id}` | удалить; есть прохождения — 409 `in-use` | `ForScenarioAsync` Delete (автор, админ) |
+| `PUT /api/v1/scenarios/{id}/cover` | обложка сценария: `ScenarioCoverInput` `{ "fileId": "…" }` → `ScenarioSavedDto` (новая версия корня); файла нет — 400 | `ForScenarioAsync` Edit |
+| `DELETE /api/v1/scenarios/{id}/cover` | убрать обложку (файл остаётся в `files`), 204; обложки нет — тоже 204 | `ForScenarioAsync` Edit |
 | `PUT/DELETE /api/v1/scenarios/{id}/favorite` | своя звёздочка вошедшего Хранителя: поставить / снять, оба 204 и идемпотентны | `ForScenarioAsync` Read |
 | `PUT /api/v1/scenarios/{id}/order` | порядок строк одной части (`ReorderRequest`) | Edit |
 | `POST …/locations`, `PUT/DELETE …/locations/{locationId}` | локация (дерево: `parentId`) | Edit |
@@ -115,6 +118,34 @@
 - **Читается** флагом `IsFavorite` в `ScenarioSummaryDto` (строка списка) и `ScenarioDto` (рабочее место) — подзапросом `EXISTS` по
   вошедшему. Список отдаёт отмеченные **первыми**, внутри групп — по названию.
 - Миграция только добавляет таблицу (старый код её не читает), так что накатывать её можно до выкатки.
+
+## Обложка сценария (2026-10-12)
+
+Решение владельца: **у сценария своя обложка — отдельное поле, а не первая локация.** Колонка `scenarios.cover_file_id uuid null` →
+`files` `ON DELETE restrict` (миграция `ScenarioCover`, только добавляет nullable колонку — совместима с кодом до неё; на `dev` накачена
+2026-10-12). Поиск сирот (`Data/Files/FileReferences`) строится по FK модели и видит новую ссылку сам — живую обложку админка не
+удалит (`FileReferencesTests` перечисляет её).
+
+- **DTO**: `CoverFileId` и `CoverUrl` (`FilesRoutes.Content`) — в строке библиотеки (`ScenarioSummaryDto`, `GET /api/v1/scenarios`) и на
+  рабочем месте (`ScenarioDto`, `GET /api/v1/scenarios/{id}`). `ScenarioService.CoverUrl` — одна функция на список, рабочее место и экспорт.
+- **Запись** — `ScenarioService.SetCoverAsync`/`RemoveCoverAsync`, право — Edit сценария (`ForScenarioAsync`): игроку и несуществующему
+  сценарию 404, чужой Хранитель правит (общая библиотека). Файла нет в `files` — 400 «Картинка не найдена — загрузите её заново.» Тот же
+  файл второй раз и снятие отсутствующей — без записи.
+- **Версия корня**: `If-Match` не нужен (скрипт агента ставит обложку, не читая версию), но обложка — колонка той же строки, что шапка и
+  текст, поэтому `xmin` и «Изменён» после записи новые. `PUT` отдаёт их (`ScenarioSavedDto`); `If-Match` шапки или текста, прочитанный
+  до обложки, получит 409 `stale` (UI перечитывает сценарий после записи, форма шапки пишет шапку **до** обложки).
+- **Удаление сценария** обложку не держит (FK от сценария к файлу); файл остаётся — сироты чистит админка.
+- **Файл сценария** — поле `coverUrl` (`/api/v1/files/{id}`), по правилам `locations[].images`: есть в этой базе — ставится, нет —
+  пропуск с общим предупреждением отчёта («Обложки сценария нет в этой базе…», и в пробном прогоне). **Замена** берёт обложку из файла,
+  как шапку: поля нет — обложка снимается. Экспорт её пишет, кругооборот её сохраняет.
+
+**Поставить обложку агентом** (токен `scenarios:write` + `files:write`, `Identity/CLAUDE.md`, «Токены агентов»; адрес — в группе
+`scenarios` с `AllowMachine`, рядом с `POST …/locations/{id}/images`):
+
+1. `POST /api/v1/files?format=webp` — multipart, поле `file`; ответ `StoredFileDto`, нужен `id`.
+2. `PUT /api/v1/scenarios/{scenarioId}/cover` — `{ "fileId": "<id>" }` → 200 `{ "version": …, "updatedAt": … }`.
+
+Убрать — `DELETE /api/v1/scenarios/{scenarioId}/cover` (204). С одним `files:write` — 403. Тест — `ScenarioCoverApiTests`.
 
 ## Иллюстрации локаций (2026-10-11)
 
@@ -265,6 +296,12 @@ Agent_with_scenarios_and_files_scopes_uploads_and_binds_a_location_image`.
 - Время — UTC (`ToUniversalTime()` на входе), пояс — у клиента.
 
 ## Тесты
+
+`ScenarioCoverApiTests`: поставить, сменить (тот же файл — без новой версии), убрать (повтор — 204), обложка в списке и на рабочем
+месте, старый `If-Match` шапки после обложки — 409 `stale`, живая обложка не сирота, снятая — сирота; файла нет — 400, игроку и
+несуществующему сценарию — 404, чужой Хранитель ставит, аноним — 401, удаление сценария оставляет файл; токен агента
+(`scenarios:write`) ставит и убирает, `files:write`/`catalogs:images` — 403; экспорт → импорт копией (обложка та же, экспорт копии
+совпадает), чужая обложка — предупреждение (и в пробном прогоне), замена без поля снимает обложку, с полем — ставит.
 
 `ScenarioFavoritesApiTests`: поставить и снять (список — отмеченные первыми, рабочее место), звёздочка личная (другой Хранитель и админ
 её не видят, ставят свою), идемпотентность и «сценарий не тронут» (версия и `updated_at`, старый `If-Match` годится), игроку и
