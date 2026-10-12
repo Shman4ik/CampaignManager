@@ -101,6 +101,7 @@ public sealed class ScenarioTests : KitContext
         {
             [nameof(IScenariosApi.ListAsync)] = _ => Task.FromResult(new ScenarioListDto([], true)),
         }));
+        Services.AddSingleton(Fake.Of<IFilesApi>(new())); // поле «Обложка» формы (ImagePicker)
         Services.AddSingleton(Fake.Of<IScenarioExchangeApi>(new()));
         var navigation = Services.GetRequiredService<NavigationManager>();
         navigation.NavigateTo("scenarios");

@@ -100,6 +100,7 @@ public sealed class ScenarioReviewG4Tests : KitContext
     public void Scenario_form_asks_for_the_era_only_when_the_library_has_more_than_one()
     {
         Services.AddSingleton(Fake.Of<IScenariosApi>(new()));
+        Services.AddSingleton(Fake.Of<CampaignManager.Contracts.Files.IFilesApi>(new())); // поле «Обложка» (ImagePicker)
 
         var without = Render<ScenarioFormModal>(p => p.Add(m => m.Open, true));
         Assert.DoesNotContain("Эпоха", without.Markup, StringComparison.Ordinal);
@@ -112,6 +113,7 @@ public sealed class ScenarioReviewG4Tests : KitContext
     public void Scenario_form_blocks_an_empty_title_and_asks_for_focus_on_it()
     {
         Services.AddSingleton(Fake.Of<IScenariosApi>(new()));
+        Services.AddSingleton(Fake.Of<CampaignManager.Contracts.Files.IFilesApi>(new())); // поле «Обложка» (ImagePicker)
         var cut = Render<ScenarioFormModal>(p => p.Add(m => m.Open, true));
 
         cut.Find("#scenario-form").Submit();
