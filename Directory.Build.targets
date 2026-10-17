@@ -1,0 +1,20 @@
+<Project>
+
+  <!--
+    Нативные библиотеки пакетов (SkiaSharp) в bin — только для своей платформы и без .pdb.
+    Без RID пакет кладёт в runtimes/ все платформы, а с ними символы libSkiaSharp.pdb по ~90 МБ на каждую Windows:
+    ~500 МБ на проект, который ссылается на сервер, и на каждую конфигурацию. Публикация с -r (v2-deploy.yml)
+    сюда не попадает: там RID задан и SDK сам берёт одну платформу.
+  -->
+  <Target Name="TrimNativeRuntimeAssets"
+          AfterTargets="ResolvePackageAssets"
+          Condition="'$(RuntimeIdentifier)' == ''">
+    <ItemGroup>
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)"
+                                    Condition="'%(Extension)' == '.pdb'
+                                               Or ('%(RuntimeIdentifier)' != '$(NETCoreSdkRuntimeIdentifier)'
+                                                   And '%(RuntimeIdentifier)' != 'osx')" />
+    </ItemGroup>
+  </Target>
+
+</Project>
