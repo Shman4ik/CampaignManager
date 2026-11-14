@@ -38,11 +38,11 @@ public static class FilesModule
             .WithName("UploadFile")
             .WithTags("Files")
             // Kestrel по умолчанию режет тело на 30 МБ, а трек бывает до 50.
-            .WithMetadata(new RequestSizeLimitAttribute(maxUpload + MultipartOverheadBytes))
-            // Клиент — WebAssembly и мобильное приложение, а не форма сервера: токена антифорджери
-            // у них нет. Межсайтовую отправку формы закрывает SameSite=Lax у куки входа: браузер не
-            // приложит её к POST с чужого сайта, и запрос придёт анонимным — 401 (Identity/CLAUDE.md).
-            .DisableAntiforgery();
+            // Форма в теле — значит, эндпоинт под защитой от межсайтовых запросов .NET 11: POST с чужого сайта
+            // (Sec-Fetch-Site: cross-site/same-site или чужой Origin) получает 400 до обработчика. Свой клиент
+            // WebAssembly шлёт same-origin, агент с токеном и мобильное приложение этих заголовков не шлют вовсе —
+            // все трое проходят. До .NET 11 здесь стоял DisableAntiforgery(), и держал всё один SameSite=Lax куки входа.
+            .WithMetadata(new RequestSizeLimitAttribute(maxUpload + MultipartOverheadBytes));
 
         app.MapPost(FilesRoutes.External, AddExternalAsync)
             .RequireAuthorization()

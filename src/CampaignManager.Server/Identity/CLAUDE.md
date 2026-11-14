@@ -86,8 +86,8 @@ https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так а�
 сыпались ошибки расшифровки (кука чужого сервера, чужие ключи Data Protection).
 
 - **Все имена — в `AppCookies`** (синглтон): вход, `LastLogin`, метка автовхода, префиксы корреляции
-  и nonce OIDC; имя antiforgery задаёт ASP.NET Core (с хешем приложения), к нему порт дописывает
-  `PostConfigure<AntiforgeryOptions>`. В Development имя — `.CampaignManager.Auth.8083`, префиксы —
+  и nonce OIDC. Куки antiforgery у приложения больше нет (см. «Межсайтовые запросы»). В Development имя —
+  `.CampaignManager.Auth.8083`, префиксы —
   `.CampaignManager.Nonce.8083.`, `.CampaignManager.Correlation.8083.` (хвост обработчика не сливается
   с портом). Новая кука приложения — имя только через `AppCookies`, не строкой.
 - **Вне Development `AppCookies.Port = null` и имена прежние**, даже если адрес задан: другое имя куки
@@ -97,10 +97,21 @@ https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так а�
 - **Порт — из конфигурации адресов** при сборке сервисов (`AppCookies.FindPort`): `urls` (`--urls`,
   `ASPNETCORE_URLS`, `applicationUrl` из `launchSettings.json`; из нескольких — первый https), затем
   `Kestrel:Endpoints:*:Url`, затем `https_ports`/`http_ports`. Не из `IServerAddressesFeature`:
-  antiforgery читает свои опции при сборке конвейера, ещё до старта Kestrel, — реальных адресов в фиче
+  опции кук читаются ещё до старта Kestrel — реальных адресов в фиче
   тогда нет, только скопированные из той же конфигурации. И не из запроса: имена кук — опции, одни на
   приложение, а за прокси порт в `Host` не тот, что слушает сервер. Порт 0 или ни одного адреса — имена
   без суффикса; сервер пишет выбранное имя (или предупреждение) в лог при старте.
+
+## Межсайтовые запросы (CSRF)
+
+С .NET 11 `UseAntiforgery()` в конвейере нет: `WebApplication` сам ставит после авторизации middleware, которое
+оценивает запрос по `Sec-Fetch-Site` и `Origin` (без токенов и куки). Безопасные методы, `same-origin`, `none` и
+запросы без обоих заголовков (агент, мобильное приложение) проходят; `cross-site`, `same-site` и чужой `Origin` —
+отказ. Отказ превращается в 400 только там, где читают форму: загрузка файла (`Files`) и статические страницы
+сервера. JSON-эндпоинты он не трогает — их, как и раньше, держат `SameSite=Lax` куки входа и отсутствие CORS.
+Серверных форм у приложения нет, поэтому токенная защита (`AddAntiforgery`/`UseAntiforgery`) не нужна; появится
+серверная форма со старым браузером в требованиях — вернуть `UseAntiforgery()` после `UseAuthorization()`.
+`DisableCsrfProtection` в конфигурации не задавать.
 
 ## JWT для мобильного приложения
 

@@ -225,7 +225,7 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 - На `/login` в Development есть те же кнопки «Войти как …».
 - **Несколько серверов параллельно — можно.** Куки привязаны к хосту, а не к порту, поэтому в
   Development к имени каждой куки приложения дописан порт сервера (`.CampaignManager.Auth.8083`,
-  `.CampaignManager.LastLogin.8083`, корреляция и nonce OIDC, antiforgery): вход на 8083 не выбивает
+  `.CampaignManager.LastLogin.8083`, корреляция и nonce OIDC): вход на 8083 не выбивает
   сессию на 8084. Порт берётся из `--urls`/`ASPNETCORE_URLS`/`launchSettings.json` (первый https) —
   без него имена прежние, о чём сервер пишет в лог при старте. Вне Development имена не меняются.
 - Вне Development (`Testing`, `Production`, `Beta`) адреса нет — 404; это держит тест `DevLoginTests`.

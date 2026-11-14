@@ -71,7 +71,6 @@ public static class PlatformModule
             app.UseHsts();
         }
 
-        // Antiforgery ставит IdentityModule.UseIdentity: ему место после авторизации.
         app.UseHttpsRedirection();
         return app;
     }
