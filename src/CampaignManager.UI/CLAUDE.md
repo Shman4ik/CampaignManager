@@ -433,8 +433,8 @@ HTML строит `MarkdownText` (Markdig): **сырой HTML выводится
 ## `/dev/*` и окружение
 
 `/dev/ui` и ссылка на неё с главной видны только при `UiEnvironment.IsDevelopment`. Окружение
-WebAssembly **запекается при сборке**: Debug (`dotnet run`) — Development, `dotnet publish` —
-Production, от окружения сервера не зависит. Страницы `/dev/*` без `[Authorize]` и открыты гостю;
+WebAssembly — **то же, что у сервера** (с .NET 11 сервер отдаёт его вместе со страницей,
+`PlatformModule.MapClientApp`; раньше оно запекалось при сборке и от сервера не зависело). Страницы `/dev/*` без `[Authorize]` и открыты гостю;
 данные за ними всё равно под правами API (`/dev/files` без входа получит 401).
 
 ## Тесты

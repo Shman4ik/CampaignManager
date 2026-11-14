@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 CampaignManager — менеджер игр Call of Cthulhu 7e: кампании и журнал, лист сыщика, помощник создания, сценарии с режимом
-игры, бой и погоня, ширма, фонотека, справочники. **.NET 10, Blazor WebAssembly поверх HTTP API (`/api/v1`), PostgreSQL
+игры, бой и погоня, ширма, фонотека, справочники. **.NET 11 (с 2026-11-14; EF Core пока 10.x — ждёт провайдер Npgsql), Blazor WebAssembly поверх HTTP API (`/api/v1`), PostgreSQL
 (Neon) через EF Core, Auth0.** Прод — https://cthulhu.dmnet.dev (отдельного beta-стенда нет — погашен 2026-10-05).
 
 Это «2.0»: первая версия (Blazor Server, `CampaignManager.Web`) работала до 2026-10-04 и удалена из репозитория в T3.3
@@ -138,13 +138,17 @@ GitHub: каждый слой — своя ветка и свой PR повер�
 
 В удалённом контейнере .NET SDK по умолчанию нет, а `dot.net` / `builds.dotnet.microsoft.com`
 закрыты egress-политикой (`curl` получает 403 от прокси) — скрипт `dotnet-install.sh` там не качается.
-Ставить надо из репозитория Ubuntu, где .NET 10 уже есть:
+Ставить надо из репозитория Ubuntu. Проекту нужен **.NET 11 SDK** (`global.json` — 11.0.100):
 
 ```bash
-apt-get update                                  # без этого dotnet-sdk-10.0 не виден
-DEBIAN_FRONTEND=noninteractive apt-get install -y dotnet-sdk-10.0
+apt-get update                                  # без этого пакет dotnet-sdk-* не виден
+DEBIAN_FRONTEND=noninteractive apt-get install -y dotnet-sdk-11.0
 dotnet --version
 ```
+
+Способ проверен для `dotnet-sdk-10.0` (до перехода на .NET 11, 2026-11-14); есть ли в репозитории контейнера
+`dotnet-sdk-11.0`, не проверялось — если пакета нет, сборка там невозможна, пока он не появится (SDK 10 решение
+с `net11.0` не соберёт).
 
 `apt-get update` ругается на недоступные PPA (deadsnakes, ondrej) — это не мешает. `nuget.org` доступен, поэтому
 `dotnet restore` и `dotnet tool install` работают; `npm` для Tailwind — тоже.
