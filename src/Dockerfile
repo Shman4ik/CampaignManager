@@ -6,7 +6,7 @@
 # Выкатывается воркфлоу .github/workflows/v2-deploy.yml (src/CLAUDE.md, «Деплой») — но из цели `prebuilt`,
 # см. в конце. Корневой Dockerfile — это v1, его не трогать.
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS base
+FROM mcr.microsoft.com/dotnet/aspnet:11.0-resolute-chiseled-extra AS base
 LABEL org.opencontainers.image.source="https://github.com/Shman4ik/CampaignManager" \
       org.opencontainers.image.description="CampaignManager 2.0"
 USER $APP_UID
@@ -19,7 +19,7 @@ ENTRYPOINT ["dotnet", "CampaignManager.Server.dll"]
 # package-lock.json) и собирает styles.css. Версия — та же, что в CI.
 FROM node:26-slim AS node
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0-resolute AS build
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \

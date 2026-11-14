@@ -15,7 +15,7 @@
     </button>
     @if (_open)
     {
-        <button type="button" class="cm-pop-backdrop" tabindex="-1" aria-hidden="true" @onclick="Close"></button>
+        <button type="button" class="cm-pop-backdrop" tabindex="-1" aria-hidden="true" @onclick="Dismiss"></button>
         <div @ref="_panel" class="cm-menu-panel" role="menu" aria-label="@AriaLabel">
             <CascadingValue Value="this" IsFixed="true">
                 @ChildContent
@@ -47,20 +47,26 @@
     /// <summary>Опасные пункты (Danger="true"): под линейкой в конце меню.</summary>
     [Parameter] public RenderFragment? Danger { get; set; }
 
-    /// <summary>Закрыть меню — пункт зовёт перед своим действием.</summary>
+    /// <summary>Закрыть меню — пункт зовёт перед своим действием, модуль — при прокрутке. Их обработчики меню не перерисуют.</summary>
     public void Close()
+    {
+        Dismiss();
+        StateHasChanged();
+    }
+
+    // Из своих обработчиков (подложка, кнопка, Esc): после них компонент перерисуется сам (BL0012).
+    private void Dismiss()
     {
         _open = false;
         _placed = false;
         _ = ReleaseAsync();
-        StateHasChanged();
     }
 
     private Task ToggleAsync()
     {
         if (_open)
         {
-            Close();
+            Dismiss();
         }
         else
         {
@@ -74,7 +80,7 @@
     {
         if (e.Key == "Escape" && _open)
         {
-            Close();
+            Dismiss();
         }
     }
 

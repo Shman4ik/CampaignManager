@@ -77,15 +77,22 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        try
         {
-            _self = DotNetObjectReference.Create(this);
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Shared/ModalWindow.razor.js");
-            _handle = await _module.InvokeAsync<IJSObjectReference>("show", _dialog, _self, Dismissible);
+            if (firstRender)
+            {
+                _self = DotNetObjectReference.Create(this);
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Shared/ModalWindow.razor.js");
+                _handle = await _module.InvokeAsync<IJSObjectReference>("show", _dialog, _self, Dismissible);
+            }
+            else if (_handle is not null)
+            {
+                await _handle.InvokeVoidAsync("setDismissible", Dismissible);
+            }
         }
-        else if (_handle is not null)
+        catch (JSDisconnectedException)
         {
-            await _handle.InvokeVoidAsync("setDismissible", Dismissible);
+            // Страница уже выгружается — показывать некому.
         }
     }
 

@@ -64,11 +64,9 @@ public static class PlatformModule
             api.UseStatusCodePages();
         });
 
-        if (app.Environment.IsDevelopment())
-        {
-            app.UseWebAssemblyDebugging();
-        }
-        else
+        // UseWebAssemblyDebugging и inspectUri в launchSettings.json в .NET 11 не нужны: отладчик WebAssembly
+        // запускают сами Visual Studio и VS Code (ASPDEPR011).
+        if (!app.Environment.IsDevelopment())
         {
             app.UseHsts();
         }
