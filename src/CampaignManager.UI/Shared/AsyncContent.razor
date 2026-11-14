@@ -10,7 +10,7 @@
     <Alert Tone="Tone.Error" Title="@ErrorTitle" ShowIcon="true">
         <ChildContent>@_error</ChildContent>
         <Actions>
-            <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="ReloadAsync">Повторить</Button>
+            <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="LoadAsync">Повторить</Button>
         </Actions>
     </Alert>
 }
@@ -61,11 +61,22 @@ else
         {
             _started = true;
             _loaded = false;
-            await ReloadAsync();
+            await LoadAsync();
         }
     }
 
+    /// <summary>Перечитать после правки. Зовёт страница, а её обработчик этот компонент не перерисует — рисуем сами.</summary>
     public async Task ReloadAsync()
+    {
+        var loading = LoadAsync();
+        StateHasChanged();
+        await loading;
+        StateHasChanged();
+    }
+
+    // Из OnParametersSetAsync и кнопки «Повторить»: до первого await и после загрузки ComponentBase перерисует сам,
+    // свой StateHasChanged здесь лишний (BL0012).
+    private async Task LoadAsync()
     {
         _cts?.Cancel();
         _cts?.Dispose();
@@ -73,7 +84,6 @@ else
         var token = _cts.Token;
         _loadedKey = Key;
         _error = null;
-        StateHasChanged();
 
         try
         {
@@ -96,8 +106,6 @@ else
                 ? $"Сервер ответил {(int)status}. Попробуйте ещё раз; если ошибка повторится — сообщите о ней."
                 : "Нет связи с сервером. Проверьте подключение и повторите.";
         }
-
-        StateHasChanged();
     }
 
     private bool IsEmptyData(TData? data) => IsEmpty is not null

@@ -27,7 +27,7 @@ Set-StrictMode -Version Latest
 
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $serverProject = Join-Path $root 'src/CampaignManager.Server'
-$serverDll = Join-Path $serverProject "bin/$Configuration/net10.0/CampaignManager.Server.dll"
+$serverDll = Join-Path $serverProject "bin/$Configuration/net11.0/CampaignManager.Server.dll"
 $probeFile = Join-Path $root 'src/CampaignManager.UI/Pages/Dev/StylesFingerprintProbe.razor'
 $stylesRoute = '_content/CampaignManager.UI/styles'
 

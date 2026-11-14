@@ -74,6 +74,19 @@ public sealed class PlatformApiTests(CmApp app) : IClassFixture<CmApp>
         Assert.DoesNotContain("Проверка связи", html);
     }
 
+    // .NET 11: окружение клиента WebAssembly приходит с сервера (WithBrowserOptions), а не запекается при сборке —
+    // кнопки тестового входа и /dev/ui видны там же, где сервер маппит /dev/login.
+    [Fact]
+    public async Task App_page_tells_client_the_server_environment()
+    {
+        var html = await app.CreateClient().GetStringAsync("/dev/ping", Cancellation);
+
+        var encoded = System.Text.RegularExpressions.Regex.Match(html, "<!--Blazor-Configuration:(?<options>[A-Za-z0-9+/=]+)-->");
+        Assert.True(encoded.Success, "Страница не несёт настроек клиента (Blazor-Configuration).");
+        using var options = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(encoded.Groups["options"].Value));
+        Assert.Equal("Testing", options.RootElement.GetProperty("webAssembly").GetProperty("environmentName").GetString());
+    }
+
     // Страница ошибки рендерится сервером статически — она не зависит от того, загрузится ли клиент.
     [Fact]
     public async Task Error_page_is_rendered_by_server()

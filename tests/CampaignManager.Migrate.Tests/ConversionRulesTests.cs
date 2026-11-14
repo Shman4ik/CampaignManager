@@ -178,7 +178,9 @@ public sealed class ConversionRulesTests
         var result = ItemPriceParser.TryParse(text);
 
         Assert.NotNull(result);
-        Assert.Equal((decimal)price, result.Price);
+        // Сравнение — в double: с .NET 11 (decimal)0.10 даёт точное значение double (0,1000000000000000055…),
+        // а не 0,10, как раньше; обратное преобразование округляет до ближайшего double и совпадает с литералом.
+        Assert.Equal(price, (double)result.Price);
         Assert.Equal(rest, result.Description);
     }
 

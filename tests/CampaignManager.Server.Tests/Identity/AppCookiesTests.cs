@@ -1,5 +1,4 @@
 using CampaignManager.Server.Identity;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Hosting;
@@ -24,7 +23,7 @@ public sealed class ListeningApp(string environmentName, string? urls) : CmApp
         }
     }
 
-    /// <summary>Имена всех кук, которые ставит приложение: вход, автовход, корреляция и nonce OIDC, antiforgery.</summary>
+    /// <summary>Имена всех кук, которые ставит приложение: вход, автовход, корреляция и nonce OIDC.</summary>
     public string[] CookieNames()
     {
         var cookies = Services.GetRequiredService<AppCookies>();
@@ -32,7 +31,6 @@ public sealed class ListeningApp(string environmentName, string? urls) : CmApp
             .Get(CookieAuthenticationDefaults.AuthenticationScheme);
         var oidc = Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>()
             .Get(OpenIdConnectDefaults.AuthenticationScheme);
-        var antiforgery = Services.GetRequiredService<IOptions<AntiforgeryOptions>>().Value;
 
         return
         [
@@ -41,7 +39,6 @@ public sealed class ListeningApp(string environmentName, string? urls) : CmApp
             cookies.AutoLoginAttemptName,
             oidc.CorrelationCookie.Name!,
             oidc.NonceCookie.Name!,
-            antiforgery.Cookie.Name!,
         ];
     }
 }
@@ -68,10 +65,7 @@ public sealed class AppCookiesTests
                 ".CampaignManager.Correlation",
                 ".CampaignManager.Nonce.",
             ],
-            names[..5]);
-        // Имя antiforgery задаёт сам ASP.NET Core (с хешем приложения) — его мы вне Development не трогаем.
-        Assert.StartsWith(".AspNetCore.Antiforgery.", names[5]);
-        Assert.DoesNotContain("8083", names[5]);
+            names);
     }
 
     // Два сервера на localhost — разные имена у каждой куки: вход на одном порту не перезаписывает другой.
@@ -92,9 +86,7 @@ public sealed class AppCookiesTests
                 ".CampaignManager.Correlation.8083.",
                 ".CampaignManager.Nonce.8083.",
             ],
-            firstNames[..5]);
-        Assert.StartsWith(".AspNetCore.Antiforgery.", firstNames[5]);
-        Assert.EndsWith(".8083", firstNames[5]);
+            firstNames);
         Assert.Empty(firstNames.Intersect(secondNames));
     }
 

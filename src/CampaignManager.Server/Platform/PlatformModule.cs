@@ -64,16 +64,13 @@ public static class PlatformModule
             api.UseStatusCodePages();
         });
 
-        if (app.Environment.IsDevelopment())
-        {
-            app.UseWebAssemblyDebugging();
-        }
-        else
+        // UseWebAssemblyDebugging и inspectUri в launchSettings.json в .NET 11 не нужны: отладчик WebAssembly
+        // запускают сами Visual Studio и VS Code (ASPDEPR011).
+        if (!app.Environment.IsDevelopment())
         {
             app.UseHsts();
         }
 
-        // Antiforgery ставит IdentityModule.UseIdentity: ему место после авторизации.
         app.UseHttpsRedirection();
         return app;
     }
@@ -97,7 +94,13 @@ public static class PlatformModule
         app.MapStaticAssets();
         app.MapRazorComponents<App>()
             .AddInteractiveWebAssemblyRenderMode()
-            .AddAdditionalAssemblies(typeof(UI.Routes).Assembly);
+            .AddAdditionalAssemblies(typeof(UI.Routes).Assembly)
+            // Окружение клиента сервер отдаёт вместе со страницей (.NET 11) — своё же: кнопки тестового входа и /dev/ui
+            // видны ровно там, где сервер маппит /dev/login.
+            // Культуру так не задать: ApplicationCulture сервер в страницу пишет, но blazor.web.js 11.0.0 её не читает
+            // (среда стартует с языком браузера) — ru-RU по-прежнему ставит Web.Client/Program.cs.
+            .WithBrowserOptions(options =>
+                options.InteractiveWebAssembly.EnvironmentName = app.Environment.EnvironmentName);
         return app;
     }
 

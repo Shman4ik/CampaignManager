@@ -3,7 +3,6 @@ using CampaignManager.Contracts;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Data;
 using CampaignManager.Data.Identity;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -61,10 +60,6 @@ public static class IdentityModule
         // друг другу вход. В остальных окружениях имена прежние (AppCookies.Port = null).
         var cookies = AppCookies.Create(configuration, builder.Environment);
         services.AddSingleton(cookies);
-        if (cookies.Port is not null)
-        {
-            services.PostConfigure<AntiforgeryOptions>(options => AppCookies.ConfigureAntiforgery(options, cookies));
-        }
 
         // Ключи в cm.data_protection_keys (T1.3 копирует их из v1), имя приложения — как в v1:
         // куки входа переживают и рестарт, и переключение на 2.0.
@@ -99,7 +94,11 @@ public static class IdentityModule
         return builder;
     }
 
-    /// <summary>Аутентификация, автовход, авторизация и antiforgery — именно в этом порядке.</summary>
+    /// <summary>
+    /// Аутентификация, автовход и авторизация — именно в этом порядке. <c>UseAntiforgery</c> здесь нет: с .NET 11
+    /// межсайтовые запросы проверяет middleware, которое <c>WebApplication</c> ставит само (по <c>Sec-Fetch-Site</c> и
+    /// <c>Origin</c>, без токенов и куки) — после авторизации. Токенам взяться неоткуда: серверных форм у приложения нет.
+    /// </summary>
     public static WebApplication UseIdentity(this WebApplication app)
     {
         app.UseAuthentication();
@@ -129,8 +128,6 @@ public static class IdentityModule
         }
 
         app.UseAuthorization();
-        // Antiforgery — после авторизации: так требует ASP.NET Core.
-        app.UseAntiforgery();
         return app;
     }
 

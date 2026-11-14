@@ -1,11 +1,11 @@
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 
 namespace CampaignManager.Server.Identity;
 
 /// <summary>
-/// Имена кук, которые ставит приложение: вход, автовход, корреляция и nonce OIDC, antiforgery.
+/// Имена кук, которые ставит приложение: вход, автовход, корреляция и nonce OIDC. Куки antiforgery нет:
+/// с .NET 11 межсайтовые запросы проверяются по заголовкам (<see cref="IdentityModule.UseIdentity"/>).
 /// <para>
 /// <b>Только в Development</b> к имени дописывается порт сервера (<c>.CampaignManager.Auth.8083</c>):
 /// куки привязаны к хосту, а не к порту, и несколько серверов на <c>localhost</c> (агенты запускают их
@@ -14,10 +14,9 @@ namespace CampaignManager.Server.Identity;
 /// </para>
 /// <para>
 /// Порт берётся из конфигурации адресов при сборке сервиса (<see cref="FindPort"/>), а не из
-/// <c>IServerAddressesFeature</c> и не из запроса. Имена кук OIDC, входа и antiforgery — опции, они
-/// одни на всё приложение, а antiforgery читает свои ещё при сборке конвейера, до старта Kestrel:
-/// реальных адресов в фиче к этому моменту нет, есть только скопированные из той же конфигурации.
-/// По запросу (<c>Host</c>) имя пришлось бы менять у каждой куки по-своему, а за прокси порт в
+/// <c>IServerAddressesFeature</c> и не из запроса. Имена кук OIDC и входа — опции, они одни на всё
+/// приложение и читаются до старта Kestrel: реальных адресов в фиче к этому моменту нет, есть только
+/// скопированные из той же конфигурации. По запросу (<c>Host</c>) имя пришлось бы менять у каждой куки по-своему, а за прокси порт в
 /// <c>Host</c> вообще не тот, на котором слушает сервер.
 /// </para>
 /// </summary>
@@ -92,15 +91,6 @@ public sealed class AppCookies(int? port)
             .Concat(Split(configuration[WebHostDefaults.HttpPortsKey]));
         return ports.Select(p => int.TryParse(p, out var value) && value > 0 ? value : (int?)null)
             .FirstOrDefault(p => p is not null);
-    }
-
-    /// <summary>Только в Development: дописывает порт к имени куки antiforgery, заданному ASP.NET Core.</summary>
-    internal static void ConfigureAntiforgery(AntiforgeryOptions options, AppCookies cookies)
-    {
-        if (cookies.Port is not null && options.Cookie.Name is { } name)
-        {
-            options.Cookie.Name = cookies.Name(name);
-        }
     }
 
     private static IEnumerable<string> Split(string? value) =>

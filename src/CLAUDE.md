@@ -55,7 +55,19 @@
 - `/health` маппится всегда (в v1 ServiceDefaults маппил его только в Development). OpenAPI —
   встроенный `Microsoft.AspNetCore.OpenApi`, документ на `/openapi/v1.json`; без Swashbuckle.
 - Культура WebAssembly — `ru-RU` при любом языке браузера (`Web.Client/Program.cs`), поэтому
-  грузятся все данные ICU (`BlazorWebAssemblyLoadAllGlobalizationData`).
+  грузятся все данные ICU (`BlazorWebAssemblyLoadAllGlobalizationData`). Через `WithBrowserOptions` её не задать:
+  `ApplicationCulture` сервер в страницу пишет, но `blazor.web.js` 11.0.0 её не читает — среда стартует с языком
+  браузера и грузит кусок ICU без русского (проверено 2026-11-14 в браузере с `en-US`).
+- **Окружение WebAssembly — окружение сервера** (.NET 11): `MapClientApp` отдаёт его через
+  `WithBrowserOptions(… InteractiveWebAssembly.EnvironmentName …)`. До .NET 11 оно запекалось при сборке
+  (Debug — Development, publish — Production). Тест `App_page_tells_client_the_server_environment`.
+- **Межсайтовые запросы** проверяет middleware .NET 11 по `Sec-Fetch-Site`/`Origin` — `UseAntiforgery` в конвейере нет
+  ([Server/Identity/CLAUDE.md](CampaignManager.Server/Identity/CLAUDE.md), «Межсайтовые запросы»).
+- **EF Core — 10.x на .NET 11**: у провайдера Npgsql нет стабильной версии под EF 11 (`Directory.Packages.props`).
+  Dependabot предложит EF 11 раньше — не сливать, пока не вышел `Npgsql.EntityFrameworkCore.PostgreSQL` 11.0.0.
+- Новые анализаторы Blazor при `-warnaserror`: `BL0012` — лишний `StateHasChanged` в обработчике события и методе
+  жизненного цикла (метод, который зовут ещё и снаружи, делится на обработчик без него и публичный с ним — `RowMenu.Close`,
+  `AsyncContent.ReloadAsync`); `BL0016` — JS-вызов в `OnAfterRenderAsync` обязан стоять в `try/catch`.
 
 ## Вход и права
 
@@ -225,7 +237,7 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 - На `/login` в Development есть те же кнопки «Войти как …».
 - **Несколько серверов параллельно — можно.** Куки привязаны к хосту, а не к порту, поэтому в
   Development к имени каждой куки приложения дописан порт сервера (`.CampaignManager.Auth.8083`,
-  `.CampaignManager.LastLogin.8083`, корреляция и nonce OIDC, antiforgery): вход на 8083 не выбивает
+  `.CampaignManager.LastLogin.8083`, корреляция и nonce OIDC): вход на 8083 не выбивает
   сессию на 8084. Порт берётся из `--urls`/`ASPNETCORE_URLS`/`launchSettings.json` (первый https) —
   без него имена прежние, о чём сервер пишет в лог при старте. Вне Development имена не меняются.
 - Вне Development (`Testing`, `Production`, `Beta`) адреса нет — 404; это держит тест `DevLoginTests`.
@@ -307,7 +319,7 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 - **Образ** собирается из корня: `wslc build -f src/Dockerfile -t campaign-manager-v2 .` (цель по
   умолчанию, `final`, публикует сама внутри образа; `prebuilt` — для деплоя, ей нужен готовый `artifacts/v2`). Внутри — только
   `src/`; Node скопирован в SDK-стадию ради Tailwind (MSBuild-таргет `UI` сам делает `npm ci`).
-  Рантайм — `aspnet:10.0-noble-chiseled-extra`, порт 8080, без shell. Проверка локально:
+  Рантайм — `aspnet:11.0-resolute-chiseled-extra` (Ubuntu 26.04: образов .NET 11 на `noble` нет), порт 8080, без shell. Проверка локально:
   `wslc run --rm -p 58080:8080 --env-file <файл> campaign-manager-v2` и `curl localhost:58080/health`.
 - **Окружение — `Production`**; страницы `/dev/*` — обычные страницы UI и открываются в любом окружении.
   `appsettings.<Env>.json` всё равно в `.gitignore`, так что настройки — только переменными окружения.

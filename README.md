@@ -7,7 +7,7 @@
 
 ## Технологии
 
-- **.NET 10** — Blazor WebAssembly поверх HTTP API (`/api/v1`), ASP.NET Core minimal APIs
+- **.NET 11** — Blazor WebAssembly поверх HTTP API (`/api/v1`), ASP.NET Core minimal APIs
 - **PostgreSQL** (Neon) — EF Core, схема `cm`; документы листа, статблоков и сцен — JSONB с версией
 - **Tailwind CSS 4** — дизайн-система [docs/design-system.md](docs/design-system.md)
 - **Auth0** (OpenID Connect) — вход через Google, passkey или почту с паролем
@@ -26,7 +26,7 @@
 
 ## Запуск
 
-Нужны .NET 10 SDK, Node.js (Tailwind собирается при сборке) и PostgreSQL 15+.
+Нужны .NET 11 SDK, Node.js (Tailwind собирается при сборке) и PostgreSQL 15+.
 
 Настройки — `src/CampaignManager.Server/appsettings.Development.json` (не в git) или переменные окружения:
 `ConnectionStrings:DefaultConnection`, `Authentication:Auth0:{Domain,ClientId,ClientSecret}`,

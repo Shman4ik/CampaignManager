@@ -45,6 +45,51 @@ public sealed class FilesApiTests(FilesApp app) : IClassFixture<FilesApp>
         Assert.Equal(HttpStatusCode.Unauthorized, upload.StatusCode);
     }
 
+    // Защита от межсайтовых запросов .NET 11 (Sec-Fetch-Site и Origin вместо токена): форму с чужого сайта сервер
+    // не принимает и под сессией вошедшего. До .NET 11 на загрузке стоял DisableAntiforgery().
+    [Theory]
+    [InlineData("Sec-Fetch-Site", "cross-site")]
+    [InlineData("Sec-Fetch-Site", "same-site")]
+    [InlineData("Origin", "https://evil.example")]
+    public async Task Upload_from_another_site_is_rejected(string header, string value)
+    {
+        TestDatabase.SkipIfMissing();
+        var stored = app.Storage.Keys.Count;
+
+        using var response = await UploadWithHeaderAsync(header, value);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(stored, app.Storage.Keys.Count);
+    }
+
+    // Свой клиент WebAssembly (same-origin), адресная строка (none) и свой же Origin — проходят; запрос вовсе без этих
+    // заголовков (агент с токеном, мобильное приложение, ApiClient в тестах) проверяют остальные тесты загрузки.
+    [Theory]
+    [InlineData("Sec-Fetch-Site", "same-origin")]
+    [InlineData("Sec-Fetch-Site", "none")]
+    [InlineData("Origin", "http://localhost")]
+    public async Task Upload_from_own_origin_passes(string header, string value)
+    {
+        TestDatabase.SkipIfMissing();
+
+        using var response = await UploadWithHeaderAsync(header, value);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private async Task<HttpResponseMessage> UploadWithHeaderAsync(string header, string value)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, FilesRoutes.Upload)
+        {
+            Content = new MultipartFormDataContent
+            {
+                { new ByteArrayContent(RandomBytes(300)), FilesRoutes.UploadField, $"{Guid.NewGuid():N}.png" },
+            },
+        };
+        request.Headers.Add(header, value);
+        return await app.CreateClient().SendAsync(request, Cancellation);
+    }
+
     [Fact]
     public async Task Orphans_are_admin_only()
     {
